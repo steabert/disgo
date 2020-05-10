@@ -23,7 +23,7 @@ var (
 	mdns6UDPAddress = net.UDPAddr{IP: net.ParseIP(mdns6Address), Port: mdnsPort}
 )
 
-func sendMDNSQuestion(conn *net.UDPConn, dst *net.UDPAddr) {
+func mdnsQuery(conn *net.UDPConn, dst *net.UDPAddr) {
 
 	// Build DNS message
 
@@ -50,28 +50,30 @@ func sendMDNSQuestion(conn *net.UDPConn, dst *net.UDPAddr) {
 	}
 }
 
-func readMDNSResponse(conn *net.UDPConn, logger chan string) {
-
-	// Read
-
+func mdnsListen(conn *net.UDPConn, logger chan string) {
 	buffer := make([]byte, 1024)
-	size, src, err := conn.ReadFromUDP(buffer)
-	if err != nil {
-		panic(err)
-	}
-	msg := new(dns.Msg)
-	if err := msg.Unpack(buffer[:size]); err != nil {
-		panic(err)
-	}
 
-	// Log
+	for {
+		// Read
 
-	for _, answer := range msg.Answer {
-		logger <- fmt.Sprintf("%s %s", src.IP, answer.String())
+		size, src, err := conn.ReadFromUDP(buffer)
+		if err != nil {
+			panic(err)
+		}
+		msg := new(dns.Msg)
+		if err := msg.Unpack(buffer[:size]); err != nil {
+			panic(err)
+		}
+
+		// Log
+
+		for _, answer := range msg.Answer {
+			logger <- fmt.Sprintf("%-24s [%s] %s", src.IP, "mDNS", answer.String())
+		}
 	}
 }
 
-func mdnsScanner(ifaces []net.Interface, logger chan string) {
+func mdnsScan(ifaces []net.Interface, logger chan string) {
 	for _, iface := range ifaces {
 
 		// Join multicast group and listen.
@@ -80,13 +82,13 @@ func mdnsScanner(ifaces []net.Interface, logger chan string) {
 		if err != nil {
 			panic(err)
 		}
-		go readMDNSResponse(mdnsMulticastConn4, logger)
+		go mdnsListen(mdnsMulticastConn4, logger)
 
 		mdnsMulticastConn6, err := net.ListenMulticastUDP("udp6", &iface, &mdns6UDPAddress)
 		if err != nil {
 			panic(err)
 		}
-		go readMDNSResponse(mdnsMulticastConn6, logger)
+		go mdnsListen(mdnsMulticastConn6, logger)
 
 		// Send question to multicast and listen for unicast reponses on interfaces addresses.
 
@@ -113,9 +115,9 @@ func mdnsScanner(ifaces []net.Interface, logger chan string) {
 				panic(err)
 			}
 
-			go readMDNSResponse(ifAddrConn, logger)
+			go mdnsListen(ifAddrConn, logger)
 
-			sendMDNSQuestion(ifAddrConn, &multicastAddr)
+			mdnsQuery(ifAddrConn, &multicastAddr)
 		}
 	}
 }
@@ -134,48 +136,53 @@ var (
 )
 
 // Send an M-SEARCH packet on an UDP connection to a UDP destination address
-func sendSSDPMSearch(conn *net.UDPConn, dst *net.UDPAddr) {
+func ssdpQuery(conn *net.UDPConn, dst *net.UDPAddr) {
 
 	// Build SSDP request
 
-	data := []byte("M-SEARCH * HTTP/1.1\r" +
-		"Host:239.255.255.250:1900\r" +
-		"Man:\"ssdp:discover\"\r" +
-		"ST: ssdp:all\rMX: 1\r\n\r\n")
+	ssdpMsearch := "M-SEARCH * HTTP/1.1\r\n" +
+		"HOST:" + dst.String() + "\r\n" +
+		"MAN:\"ssdp:discover\"\r\n" +
+		"ST: ssdp:all\r\n" +
+		"MX: 1\r\n\r\n"
 
 	// Send
 
-	_, err := conn.WriteToUDP(data, dst)
+	_, err := conn.WriteToUDP([]byte(ssdpMsearch), dst)
 	if err != nil {
 		panic(err)
 	}
 }
 
 // Send an M-SEARCH packet on an UDP connection to a UDP destination address
-func readSSDPResponse(conn *net.UDPConn, logger chan string) {
-
-	// Read
-
+func ssdpListen(conn *net.UDPConn, logger chan string) {
 	buffer := make([]byte, 1024)
-	size, src, err := conn.ReadFromUDP(buffer)
-	if err != nil {
-		panic(err)
+
+	for {
+		// Read
+
+		size, src, err := conn.ReadFromUDP(buffer)
+		if err != nil {
+			panic(err)
+		}
+
+		var server string
+		reader := bufio.NewReader(bytes.NewReader(buffer[:size]))
+		req := &http.Request{} // Needed for ReadResponse but doesn't have to be real
+		rsp, err := http.ReadResponse(reader, req)
+		if err != nil {
+			server = "[parser error]"
+		} else {
+			server = rsp.Header["Server"][0]
+		}
+
+		// Log
+
+		logger <- fmt.Sprintf("%-24s [%s] %s", src.IP, "SSDP", server)
 	}
-
-	reader := bufio.NewReader(bytes.NewReader(buffer[:size]))
-	req := &http.Request{} // Needed for ReadResponse but doesn't have to be real
-	response, err := http.ReadResponse(reader, req)
-	if err != nil {
-		fmt.Printf("failed to parse SSDP response: %s", err)
-	}
-	headers := response.Header
-
-	// Log
-
-	logger <- fmt.Sprintf("%s %s", src.IP, headers["Server"][0])
 }
 
-func ssdpScanner(ifaces []net.Interface, logger chan string) {
+func ssdpScan(ifaces []net.Interface, logger chan string) {
 	for _, iface := range ifaces {
 		ifAddrs, err := iface.Addrs()
 		if err != nil {
@@ -200,9 +207,9 @@ func ssdpScanner(ifaces []net.Interface, logger chan string) {
 				panic(err)
 			}
 
-			go readSSDPResponse(ifAddrConn, logger)
+			go ssdpListen(ifAddrConn, logger)
 
-			sendSSDPMSearch(ifAddrConn, &multicastAddr)
+			ssdpQuery(ifAddrConn, &multicastAddr)
 		}
 	}
 }
@@ -217,10 +224,15 @@ func main() {
 
 	logger := make(chan string)
 
-	go ssdpScanner(ifaces, logger)
-	go mdnsScanner(ifaces, logger)
+	ssdpScan(ifaces, logger)
+	mdnsScan(ifaces, logger)
 
+	logged := make(map[string]bool)
 	for msg := range logger {
+		if logged[msg] {
+			continue
+		}
+		logged[msg] = true
 		fmt.Println(msg)
 	}
 
