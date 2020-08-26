@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+
+	"github.com/steabert/disgo/reporter"
 )
 
 // SSDP
@@ -52,7 +54,7 @@ func query(conn *net.UDPConn, dst *net.UDPAddr) {
 }
 
 // Send an M-SEARCH packet on an UDP connection to a UDP destination address
-func listen(conn *net.UDPConn, reporter chan string) {
+func listen(conn *net.UDPConn, reporter reporter.Reporter) {
 	buffer := make([]byte, 1024)
 
 	for {
@@ -74,14 +76,16 @@ func listen(conn *net.UDPConn, reporter chan string) {
 			server = rsp.Header["Server"][0]
 		}
 
-		// Log
+		// Output
 
-		report(reporter, src.IP, server)
+		reporter.Print(src.IP, server)
 	}
 }
 
 // Scan queries and listens for SSDP multicast on all interfaces.
-func Scan(ifaces []net.Interface, reporter chan string) {
+func Scan(ifaces []net.Interface, output chan string) {
+	reporter := reporter.New(output, protocol)
+
 	for _, iface := range ifaces {
 		ifAddrs, err := iface.Addrs()
 		if err != nil {

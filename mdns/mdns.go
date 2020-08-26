@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/miekg/dns"
+	"github.com/steabert/disgo/reporter"
 )
 
 // mDNS
@@ -60,7 +61,7 @@ func query(conn *net.UDPConn, dst *net.UDPAddr) {
 }
 
 // listen watches a UDP connection for mDNS messages.
-func listen(conn *net.UDPConn, reporter chan string) {
+func listen(conn *net.UDPConn, reporter reporter.Reporter) {
 	buffer := make([]byte, 1024)
 
 	for {
@@ -80,13 +81,15 @@ func listen(conn *net.UDPConn, reporter chan string) {
 		// Log
 
 		for _, answer := range msg.Answer {
-			report(reporter, src.IP, answer.String())
+			reporter.Print(src.IP, answer.String())
 		}
 	}
 }
 
 // Scan queries and listens for mDNS multicast on all interfaces.
-func Scan(ifaces []net.Interface, reporter chan string) {
+func Scan(ifaces []net.Interface, output chan string) {
+	reporter := reporter.New(output, protocol)
+
 	for _, iface := range ifaces {
 
 		// Join multicast group and listen.
