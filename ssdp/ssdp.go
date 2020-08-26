@@ -17,7 +17,8 @@ const (
 	ssdp4Address = "239.255.255.250"
 	ssdp6Address = "ff0e::c"
 	ssdpPort     = 1900
-	protocol     = "SSDP"
+	// Protocol name of the multicast protocol.
+	Protocol = "SSDP"
 )
 
 var (
@@ -26,11 +27,7 @@ var (
 )
 
 func logError(err error) {
-	fmt.Fprintf(os.Stderr, "[error]: %s: %s\n", protocol, err)
-}
-
-func report(reporter chan string, ip net.IP, msg string) {
-	reporter <- fmt.Sprintf("%-24s [%s] %s", ip, protocol, msg)
+	fmt.Fprintf(os.Stderr, "[error]: %s: %s\n", Protocol, err)
 }
 
 // Send an M-SEARCH packet on an UDP connection to a UDP destination address
@@ -83,39 +80,21 @@ func listen(conn *net.UDPConn, reporter reporter.Reporter) {
 }
 
 // Scan queries and listens for SSDP multicast on all interfaces.
-func Scan(ifaces []net.Interface, output chan string) {
-	reporter := reporter.New(output, protocol)
+func Scan(ifSockAddr net.UDPAddr, reporter reporter.Reporter) {
 
-	for _, iface := range ifaces {
-		ifAddrs, err := iface.Addrs()
-		if err != nil {
-			logError(err)
-			continue
-		}
-		for _, ifAddr := range ifAddrs {
-			ip, _, err := net.ParseCIDR(ifAddr.String())
-			if err != nil {
-				logError(err)
-				continue
-			}
-
-			var multicastAddr net.UDPAddr
-			if ip.To4() != nil {
-				multicastAddr = ssdp4UDPAddress
-			} else {
-				multicastAddr = ssdp6UDPAddress
-			}
-
-			ifAddrUDP := net.UDPAddr{IP: ip, Port: 0, Zone: iface.Name}
-			ifAddrConn, err := net.ListenUDP("udp", &ifAddrUDP)
-			if err != nil {
-				logError(err)
-				continue
-			}
-
-			go listen(ifAddrConn, reporter)
-
-			query(ifAddrConn, &multicastAddr)
-		}
+	var multicastAddr net.UDPAddr
+	if ifSockAddr.IP.To4() != nil {
+		multicastAddr = ssdp4UDPAddress
+	} else {
+		multicastAddr = ssdp6UDPAddress
 	}
+
+	ifAddrConn, err := net.ListenUDP("udp", &ifSockAddr)
+	if err != nil {
+		logError(err)
+		return
+	}
+
+	query(ifAddrConn, &multicastAddr)
+	listen(ifAddrConn, reporter)
 }
