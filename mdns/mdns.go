@@ -26,6 +26,10 @@ func logError(err error) {
 	fmt.Fprintf(os.Stderr, "[error]: %s: %s\n", protocol, err)
 }
 
+func report(reporter chan string, ip net.IP, msg string) {
+	reporter <- fmt.Sprintf("%-24s [%s] %s", ip, protocol, msg)
+}
+
 func query(conn *net.UDPConn, dst *net.UDPAddr) {
 
 	// Build DNS message
@@ -56,7 +60,7 @@ func query(conn *net.UDPConn, dst *net.UDPAddr) {
 }
 
 // listen watches a UDP connection for mDNS messages.
-func listen(conn *net.UDPConn, logger chan string) {
+func listen(conn *net.UDPConn, reporter chan string) {
 	buffer := make([]byte, 1024)
 
 	for {
@@ -76,13 +80,13 @@ func listen(conn *net.UDPConn, logger chan string) {
 		// Log
 
 		for _, answer := range msg.Answer {
-			logger <- fmt.Sprintf("%-24s [%s] %s", src.IP, "mDNS", answer.String())
+			report(reporter, src.IP, answer.String())
 		}
 	}
 }
 
 // Scan queries and listens for mDNS multicast on all interfaces.
-func Scan(ifaces []net.Interface, logger chan string) {
+func Scan(ifaces []net.Interface, reporter chan string) {
 	for _, iface := range ifaces {
 
 		// Join multicast group and listen.
@@ -91,14 +95,14 @@ func Scan(ifaces []net.Interface, logger chan string) {
 		if err != nil {
 			logError(err)
 		} else {
-			go listen(mdnsMulticastConn4, logger)
+			go listen(mdnsMulticastConn4, reporter)
 		}
 
 		mdnsMulticastConn6, err := net.ListenMulticastUDP("udp6", &iface, &mdns6UDPAddress)
 		if err != nil {
 			logError(err)
 		} else {
-			go listen(mdnsMulticastConn6, logger)
+			go listen(mdnsMulticastConn6, reporter)
 		}
 
 		// Send question to multicast and listen for unicast reponses on interfaces addresses.
@@ -129,7 +133,7 @@ func Scan(ifaces []net.Interface, logger chan string) {
 				continue
 			}
 
-			go listen(ifAddrConn, logger)
+			go listen(ifAddrConn, reporter)
 
 			query(ifAddrConn, &multicastAddr)
 		}

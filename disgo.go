@@ -14,13 +14,13 @@ func main() {
 		panic("failed to get interfaces")
 	}
 
-	logger := make(chan string)
+	reporter := make(chan string)
 
-	ssdp.Scan(ifaces, logger)
-	mdns.Scan(ifaces, logger)
+	ssdp.Scan(ifaces, reporter)
+	mdns.Scan(ifaces, reporter)
 
 	logged := make(map[string]bool)
-	for msg := range logger {
+	for msg := range reporter {
 		if logged[msg] {
 			continue
 		}

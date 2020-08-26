@@ -27,6 +27,10 @@ func logError(err error) {
 	fmt.Fprintf(os.Stderr, "[error]: %s: %s\n", protocol, err)
 }
 
+func report(reporter chan string, ip net.IP, msg string) {
+	reporter <- fmt.Sprintf("%-24s [%s] %s", ip, protocol, msg)
+}
+
 // Send an M-SEARCH packet on an UDP connection to a UDP destination address
 func query(conn *net.UDPConn, dst *net.UDPAddr) {
 
@@ -48,7 +52,7 @@ func query(conn *net.UDPConn, dst *net.UDPAddr) {
 }
 
 // Send an M-SEARCH packet on an UDP connection to a UDP destination address
-func listen(conn *net.UDPConn, logger chan string) {
+func listen(conn *net.UDPConn, reporter chan string) {
 	buffer := make([]byte, 1024)
 
 	for {
@@ -72,12 +76,12 @@ func listen(conn *net.UDPConn, logger chan string) {
 
 		// Log
 
-		logger <- fmt.Sprintf("%-24s [%s] %s", src.IP, "SSDP", server)
+		report(reporter, src.IP, server)
 	}
 }
 
 // Scan queries and listens for SSDP multicast on all interfaces.
-func Scan(ifaces []net.Interface, logger chan string) {
+func Scan(ifaces []net.Interface, reporter chan string) {
 	for _, iface := range ifaces {
 		ifAddrs, err := iface.Addrs()
 		if err != nil {
@@ -105,7 +109,7 @@ func Scan(ifaces []net.Interface, logger chan string) {
 				continue
 			}
 
-			go listen(ifAddrConn, logger)
+			go listen(ifAddrConn, reporter)
 
 			query(ifAddrConn, &multicastAddr)
 		}
