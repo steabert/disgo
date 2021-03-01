@@ -4,16 +4,14 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/steabert/disgo/mdns"
-	"github.com/steabert/disgo/reporter"
-	"github.com/steabert/disgo/ssdp"
+	"github.com/steabert/disgo/lib"
 )
 
 func main() {
 	// Channel to collect the output when IP was discovered.
 	out := make(chan string)
-	ssdpReporter := reporter.New(out, ssdp.Protocol)
-	mdnsReporter := reporter.New(out, mdns.Protocol)
+	ssdpReporter := lib.NewReporter(out, lib.SSDPProtocolName)
+	mdnsReporter := lib.NewReporter(out, lib.MDNSProtocolName)
 
 	// Loop over interfaces to start listening for multicast.
 	ifaces, err := net.Interfaces()
@@ -23,8 +21,8 @@ func main() {
 	for _, iface := range ifaces {
 
 		// Passive listeners on the interface.
-		go mdns.ListenMulticast("udp4", iface, mdnsReporter)
-		go mdns.ListenMulticast("udp6", iface, mdnsReporter)
+		go lib.MDNSListenMulticast("udp4", iface, mdnsReporter)
+		go lib.MDNSListenMulticast("udp6", iface, mdnsReporter)
 
 		ifAddrs, err := iface.Addrs()
 		if err != nil {
@@ -39,8 +37,8 @@ func main() {
 			ifAddrUDP := net.UDPAddr{IP: ipAddr, Port: 0, Zone: iface.Name}
 
 			// Active scan on the interface address.
-			go ssdp.Scan(ifAddrUDP, ssdpReporter)
-			go mdns.Scan(ifAddrUDP, mdnsReporter)
+			go lib.SSDPScan(ifAddrUDP, ssdpReporter)
+			go lib.MDNSScan(ifAddrUDP, mdnsReporter)
 		}
 	}
 

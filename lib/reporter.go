@@ -1,4 +1,4 @@
-package reporter
+package lib
 
 import (
 	"fmt"
@@ -11,8 +11,8 @@ type Reporter struct {
 	protocol string
 }
 
-// New creates a new reporter.
-func New(output chan string, protocol string) Reporter {
+// NewReporter creates a new reporter.
+func NewReporter(output chan string, protocol string) Reporter {
 	return Reporter{output, protocol}
 }
 

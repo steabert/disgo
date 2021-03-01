@@ -1,4 +1,4 @@
-package ssdp
+package lib
 
 import (
 	"bufio"
@@ -7,8 +7,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-
-	"github.com/steabert/disgo/reporter"
 )
 
 // SSDP
@@ -17,8 +15,8 @@ const (
 	ssdp4Address = "239.255.255.250"
 	ssdp6Address = "ff0e::c"
 	ssdpPort     = 1900
-	// Protocol name of the multicast protocol.
-	Protocol = "SSDP"
+	// SSDPProtocolName name of the multicast protocol.
+	SSDPProtocolName = "SSDP"
 )
 
 var (
@@ -26,12 +24,12 @@ var (
 	ssdp6UDPAddress = net.UDPAddr{IP: net.ParseIP(ssdp6Address), Port: ssdpPort}
 )
 
-func logError(err error) {
-	fmt.Fprintf(os.Stderr, "[error]: %s: %s\n", Protocol, err)
+func ssdpLogError(err error) {
+	fmt.Fprintf(os.Stderr, "[error]: %s: %s\n", SSDPProtocolName, err)
 }
 
 // Send an M-SEARCH packet on an UDP connection to a UDP destination address
-func query(conn *net.UDPConn, dst *net.UDPAddr) {
+func ssdpQuery(conn *net.UDPConn, dst *net.UDPAddr) {
 
 	// Build SSDP request
 
@@ -45,13 +43,13 @@ func query(conn *net.UDPConn, dst *net.UDPAddr) {
 
 	_, err := conn.WriteToUDP([]byte(ssdpMsearch), dst)
 	if err != nil {
-		logError(err)
+		ssdpLogError(err)
 		return
 	}
 }
 
 // Send an M-SEARCH packet on an UDP connection to a UDP destination address
-func listen(conn *net.UDPConn, reporter reporter.Reporter) {
+func ssdpListen(conn *net.UDPConn, reporter Reporter) {
 	buffer := make([]byte, 1024)
 
 	for {
@@ -59,7 +57,7 @@ func listen(conn *net.UDPConn, reporter reporter.Reporter) {
 
 		size, src, err := conn.ReadFromUDP(buffer)
 		if err != nil {
-			logError(err)
+			ssdpLogError(err)
 			return
 		}
 
@@ -79,8 +77,8 @@ func listen(conn *net.UDPConn, reporter reporter.Reporter) {
 	}
 }
 
-// Scan queries and listens for SSDP multicast on all interfaces.
-func Scan(ifSockAddr net.UDPAddr, reporter reporter.Reporter) {
+// SSDPScan queries and listens for SSDP multicast on all interfaces.
+func SSDPScan(ifSockAddr net.UDPAddr, reporter Reporter) {
 
 	var multicastAddr net.UDPAddr
 	if ifSockAddr.IP.To4() != nil {
@@ -91,10 +89,10 @@ func Scan(ifSockAddr net.UDPAddr, reporter reporter.Reporter) {
 
 	ifAddrConn, err := net.ListenUDP("udp", &ifSockAddr)
 	if err != nil {
-		logError(err)
+		ssdpLogError(err)
 		return
 	}
 
-	query(ifAddrConn, &multicastAddr)
-	listen(ifAddrConn, reporter)
+	ssdpQuery(ifAddrConn, &multicastAddr)
+	ssdpListen(ifAddrConn, reporter)
 }

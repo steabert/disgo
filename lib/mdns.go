@@ -1,4 +1,4 @@
-package mdns
+package lib
 
 import (
 	"fmt"
@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/miekg/dns"
-	"github.com/steabert/disgo/reporter"
 )
 
 // mDNS
@@ -15,8 +14,8 @@ const (
 	mdns4Address = "224.0.0.251"
 	mdns6Address = "ff02::fb"
 	mdnsPort     = 5353
-	// Protocol name of the multicast protocol.
-	Protocol = "mDNS"
+	// MDNSProtocolName name of the multicast protocol.
+	MDNSProtocolName = "mDNS"
 )
 
 var (
@@ -24,11 +23,11 @@ var (
 	mdns6UDPAddress = net.UDPAddr{IP: net.ParseIP(mdns6Address), Port: mdnsPort}
 )
 
-func logError(err error) {
-	fmt.Fprintf(os.Stderr, "[error]: %s: %s\n", Protocol, err)
+func mdnsLogError(err error) {
+	fmt.Fprintf(os.Stderr, "[error]: %s: %s\n", MDNSProtocolName, err)
 }
 
-func query(conn *net.UDPConn, dst *net.UDPAddr) {
+func mdnsQuery(conn *net.UDPConn, dst *net.UDPAddr) {
 
 	// Build DNS message
 
@@ -44,7 +43,7 @@ func query(conn *net.UDPConn, dst *net.UDPAddr) {
 	m.RecursionDesired = false
 	data, err := m.Pack()
 	if err != nil {
-		logError(err)
+		mdnsLogError(err)
 		return
 	}
 
@@ -52,13 +51,13 @@ func query(conn *net.UDPConn, dst *net.UDPAddr) {
 
 	_, err = conn.WriteToUDP(data, dst)
 	if err != nil {
-		logError(err)
+		mdnsLogError(err)
 		return
 	}
 }
 
 // listen watches a UDP connection for mDNS messages.
-func listen(conn *net.UDPConn, reporter reporter.Reporter) {
+func mdnsListen(conn *net.UDPConn, reporter Reporter) {
 	buffer := make([]byte, 1024)
 
 	for {
@@ -66,12 +65,12 @@ func listen(conn *net.UDPConn, reporter reporter.Reporter) {
 
 		size, src, err := conn.ReadFromUDP(buffer)
 		if err != nil {
-			logError(err)
+			mdnsLogError(err)
 			return
 		}
 		msg := new(dns.Msg)
 		if err := msg.Unpack(buffer[:size]); err != nil {
-			logError(err)
+			mdnsLogError(err)
 			return
 		}
 
@@ -83,8 +82,8 @@ func listen(conn *net.UDPConn, reporter reporter.Reporter) {
 	}
 }
 
-// ListenMulticast listens for mDNS multicast on the provided interface.
-func ListenMulticast(network string, iface net.Interface, out reporter.Reporter) {
+// MDNSListenMulticast listens for mDNS multicast on the provided interface.
+func MDNSListenMulticast(network string, iface net.Interface, out Reporter) {
 	var multicastAddr net.UDPAddr
 	if network == "udp4" {
 		multicastAddr = mdns4UDPAddress
@@ -96,14 +95,14 @@ func ListenMulticast(network string, iface net.Interface, out reporter.Reporter)
 
 	mdnsMulticastConn, err := net.ListenMulticastUDP(network, &iface, &multicastAddr)
 	if err != nil {
-		logError(err)
+		mdnsLogError(err)
 		return
 	}
-	listen(mdnsMulticastConn, out)
+	mdnsListen(mdnsMulticastConn, out)
 }
 
-// Scan queries and listens for mDNS multicast on the provided address.
-func Scan(ifSockAddr net.UDPAddr, out reporter.Reporter) {
+// MDNSScan queries and listens for mDNS multicast on the provided address.
+func MDNSScan(ifSockAddr net.UDPAddr, out Reporter) {
 
 	var multicastAddr net.UDPAddr
 	if ifSockAddr.IP.To4() != nil {
@@ -114,11 +113,11 @@ func Scan(ifSockAddr net.UDPAddr, out reporter.Reporter) {
 
 	ifAddrConn, err := net.ListenUDP("udp", &ifSockAddr)
 	if err != nil {
-		logError(err)
+		mdnsLogError(err)
 		return
 	}
 
 	// Send question to multicast and listen for unicast reponses on interfaces addresses.
-	query(ifAddrConn, &multicastAddr)
-	listen(ifAddrConn, out)
+	mdnsQuery(ifAddrConn, &multicastAddr)
+	mdnsListen(ifAddrConn, out)
 }
