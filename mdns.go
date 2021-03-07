@@ -18,6 +18,12 @@ const (
 	MDNSProtocolName = "mDNS"
 )
 
+var mdnsServices = []string{
+	"_googlecast._tcp.local.",
+	"_axis-video.tcp.local.",
+	"_http._tcp.local.",
+}
+
 var (
 	mdns4UDPAddress = net.UDPAddr{IP: net.ParseIP(mdns4Address), Port: mdnsPort}
 	mdns6UDPAddress = net.UDPAddr{IP: net.ParseIP(mdns6Address), Port: mdnsPort}
@@ -31,29 +37,32 @@ func mdnsQuery(conn *net.UDPConn, dst *net.UDPAddr) {
 
 	// Build DNS message
 
-	m := new(dns.Msg)
-	m.SetQuestion("_googlecast._tcp.local.", dns.TypePTR)
-	// RFC 6762, section 18.12.  Repurposing of Top Bit of qclass in Question
-	// Section
-	//
-	// In the Question Section of a Multicast DNS query, the top bit of the qclass
-	// field is used to indicate that unicast responses are preferred for this
-	// particular question.  (See Section 5.4.)
-	m.Question[0].Qclass |= 1 << 15
-	m.RecursionDesired = false
-	data, err := m.Pack()
-	if err != nil {
-		mdnsLogError(err)
-		return
+	for _, service := range mdnsServices {
+		m := new(dns.Msg)
+		m.SetQuestion(service, dns.TypePTR)
+		// RFC 6762, section 18.12.  Repurposing of Top Bit of qclass in Question
+		// Section
+		//
+		// In the Question Section of a Multicast DNS query, the top bit of the qclass
+		// field is used to indicate that unicast responses are preferred for this
+		// particular question.  (See Section 5.4.)
+		m.Question[0].Qclass |= 1 << 15
+		m.RecursionDesired = false
+		data, err := m.Pack()
+		if err != nil {
+			mdnsLogError(err)
+			return
+		}
+
+		// Send
+
+		_, err = conn.WriteToUDP(data, dst)
+		if err != nil {
+			mdnsLogError(err)
+			continue
+		}
 	}
 
-	// Send
-
-	_, err = conn.WriteToUDP(data, dst)
-	if err != nil {
-		mdnsLogError(err)
-		return
-	}
 }
 
 // listen watches a UDP connection for mDNS messages.
