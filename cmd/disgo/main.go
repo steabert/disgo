@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/steabert/disgo/lib"
+	"github.com/steabert/disgo"
 )
 
 func main() {
 	// Channel to collect the output when IP was discovered.
 	out := make(chan string)
-	ssdpReporter := lib.NewReporter(out, lib.SSDPProtocolName)
-	mdnsReporter := lib.NewReporter(out, lib.MDNSProtocolName)
+	ssdpReporter := disgo.NewReporter(out, disgo.SSDPProtocolName)
+	mdnsReporter := disgo.NewReporter(out, disgo.MDNSProtocolName)
 
 	// Loop over interfaces to start listening for multicast.
 	ifaces, err := net.Interfaces()
@@ -21,8 +21,8 @@ func main() {
 	for _, iface := range ifaces {
 
 		// Passive listeners on the interface.
-		go lib.MDNSListenMulticast("udp4", iface, mdnsReporter)
-		go lib.MDNSListenMulticast("udp6", iface, mdnsReporter)
+		go disgo.MDNSListenMulticast("udp4", iface, mdnsReporter)
+		go disgo.MDNSListenMulticast("udp6", iface, mdnsReporter)
 
 		ifAddrs, err := iface.Addrs()
 		if err != nil {
@@ -37,8 +37,8 @@ func main() {
 			ifAddrUDP := net.UDPAddr{IP: ipAddr, Port: 0, Zone: iface.Name}
 
 			// Active scan on the interface address.
-			go lib.SSDPScan(ifAddrUDP, ssdpReporter)
-			go lib.MDNSScan(ifAddrUDP, mdnsReporter)
+			go disgo.SSDPScan(ifAddrUDP, ssdpReporter)
+			go disgo.MDNSScan(ifAddrUDP, mdnsReporter)
 		}
 	}
 
